@@ -1,0 +1,46 @@
+{
+  "name": "aseps",
+  "version": "1.0.0",
+  "description": "Australian State Economic Pathways Simulator — Evidence-Based Policy Research Tool",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "fetch-data": "node scripts/fetch-abs-data.js",
+    "validate": "node scripts/validate-data.js",
+    "update": "npm run fetch-data && npm run validate"
+  },
+  "dependencies": {
+    "katex": "^0.16.10",
+    "recharts": "^2.12.2",
+    "html2pdf.js": "^0.10.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "lucide-react": "^0.383.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "vite": "^5.3.1",
+    "vite-plugin-pwa": "^0.20.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "homepage": "https://aseps-au.github.io/aseps",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aseps-au/aseps.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "australia", "economics", "policy", "victoria", "solow", "growth-model",
+    "abs-data", "state-accounts", "productivity", "research"
+  ]
+}

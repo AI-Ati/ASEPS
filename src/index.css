@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply bg-parchment-100 text-federal-900;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Academic typography defaults */
+  h1, h2, h3 {
+    @apply font-display;
+    font-feature-settings: "kern" 1, "liga" 1;
+  }
+
+  p {
+    @apply font-body leading-relaxed;
+  }
+
+  /* KaTeX formula styling */
+  .katex-display {
+    @apply my-4 overflow-x-auto py-2;
+    font-size: 1.05em;
+  }
+  
+  .katex {
+    font-size: 1em;
+  }
+
+  /* Metric value display */
+  .metric-value {
+    @apply font-mono font-medium text-federal-700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Source citation links */
+  .citation-link {
+    @apply text-xs text-federal-400 border-b border-dotted border-federal-300 hover:text-federal-600 hover:border-federal-600 transition-colors;
+  }
+}
+
+@layer components {
+  /* Academic card component */
+  .card-academic {
+    @apply bg-white border border-parchment-300 shadow-academic rounded-academic p-6;
+  }
+
+  /* Section label style (small caps effect) */
+  .section-label {
+    @apply text-xs font-sans font-semibold tracking-[0.12em] uppercase text-federal-400;
+  }
+
+  /* Severity badge */
+  .severity-critical { @apply bg-red-100 text-red-800 border border-red-200; }
+  .severity-high     { @apply bg-orange-100 text-orange-800 border border-orange-200; }
+  .severity-medium   { @apply bg-amber-100 text-amber-800 border border-amber-200; }
+  .severity-low      { @apply bg-green-100 text-green-800 border border-green-200; }
+
+  /* Data table styles */
+  .data-table {
+    @apply w-full text-sm;
+  }
+  .data-table th {
+    @apply text-left py-2 px-3 bg-federal-50 text-federal-600 font-sans font-semibold text-xs uppercase tracking-wide border-b border-parchment-300;
+  }
+  .data-table td {
+    @apply py-2.5 px-3 border-b border-parchment-200 font-mono text-xs;
+  }
+  .data-table tr:last-child td {
+    @apply border-b-0;
+  }
+  .data-table tr:hover td {
+    @apply bg-parchment-50;
+  }
+}
+
+@layer utilities {
+  /* Print styles for PDF export */
+  @media print {
+    .no-print { display: none !important; }
+    .print-break { page-break-before: always; }
+    body { @apply bg-white text-black; }
+    .card-academic { @apply shadow-none border-gray-300; }
+  }
+
+  /* Fade-in animation for tab content */
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}
