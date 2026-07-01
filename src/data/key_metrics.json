@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "generated": "2026-Q04",
+    "generated": "2026-Q07",
     "auto_update": true,
     "sources": [
       "ABS 5220.0 Australian National Accounts: State Accounts 2023-24",
@@ -13,9 +13,9 @@
       "ABS 5209.0.55.001 Australian National Accounts: Capital Stock 2023-24"
     ],
     "reference_period": "2023-24 (unless noted)",
-    "next_auto_update": "2026-06-30",
+    "next_auto_update": "2026-09-29",
     "disclaimer": "All data sourced exclusively from ABS, RBA and state treasuries. For educational and research purposes only. Not financial or investment advice.",
-    "last_auto_update": "2026-04-01T04:50:28.165Z"
+    "last_auto_update": "2026-07-01T06:37:30.334Z"
   },
   "national": {
     "id": "AUS",
