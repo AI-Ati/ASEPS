@@ -1,6 +1,6 @@
 # ASEPS — Australian State Economic Pathways Simulator
 
-> **The first interactive tool in Australia** that combines all-state economic data (ABS/RBA), root-cause diagnosis, scientifically calibrated growth models (Solow–Lucas), and step-by-step policy pathways — with Victoria at full depth.
+> An interactive tool that combines all-state economic data (ABS/RBA), root-cause diagnosis, scientifically calibrated growth models (Solow–Lucas), and step-by-step policy pathways — with Victoria at full depth.
 
 ---
 
@@ -12,7 +12,7 @@ ASEPS is a static educational research tool for:
 - **University students**: Transparent methodology linking raw data → diagnosis → economic theory → policy
 - **Informed public**: Accessible visual summaries of state economic performance
 
-**No equivalent tool exists** across any Australian government or academic institution (confirmed via exhaustive search of all .gov.au and .edu.au domains, March 2025).
+At launch (March 2025) no comparable public tool was found across .gov.au and .edu.au domains.
 
 ---
 
@@ -53,10 +53,13 @@ npm run build
 ## Data Architecture
 
 ### Auto-Updated Quarterly (GitHub Actions)
-`src/data/key_metrics.json` — fetched from ABS SDMX API:
-- GSP growth rates (ABS 5220.0)
-- Unemployment rates (ABS 6202.0)
-- CPI/inflation (ABS 6401.0)
+`src/data/key_metrics.json` — fetched from the ABS Data API (SDMX-JSON):
+- Unemployment rate, seasonally adjusted, by state (ABS 6202.0)
+- CPI annual % change by capital city (ABS 6401.0)
+
+Values outside plausible ranges are rejected, and the file is only rewritten when a value changes.
+The reference periods used are recorded in `_meta.auto_reference_periods`.
+GSP (ABS 5220.0, annual), debt and productivity figures are updated manually.
 
 ### Manual Update (Every 6 Months)
 `src/data/deep_pathways.json` — requires human review:

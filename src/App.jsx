@@ -230,8 +230,13 @@ export default function App() {
             </p>
             <p className="mt-3">
               Data auto-updated quarterly from ABS API. Deep pathways reviewed manually every 6 months. 
-              Last data update: {keyMetrics._meta.last_auto_update || keyMetrics._meta.generated} · 
+              Last data update: {keyMetrics._meta.last_auto_update
+                ? new Date(keyMetrics._meta.last_auto_update).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+                : keyMetrics._meta.generated} · 
               Next update: {keyMetrics._meta.next_auto_update}
+              {keyMetrics._meta.auto_reference_periods && (
+                <> · Latest ABS periods: unemployment {keyMetrics._meta.auto_reference_periods.unemployment_rate_pct ?? '—'}, CPI {keyMetrics._meta.auto_reference_periods.cpi_inflation_pct ?? '—'}</>
+              )}
             </p>
           </div>
         </div>
