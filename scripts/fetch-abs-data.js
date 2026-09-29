@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 /**
  * ASEPS ABS Data Fetcher
- * Fetches latest key economic metrics from ABS SDMX JSON API
- * Runs quarterly via GitHub Actions
- * 
- * ABS API documentation: https://api.data.abs.gov.au/
- * SDMX REST API: https://data.abs.gov.au/sdmx-json/
+ * Fetches the latest state unemployment (ABS 6202.0 Labour Force) and
+ * annual CPI inflation (ABS 6401.0) from the ABS Data API (SDMX-JSON).
+ * Runs quarterly via GitHub Actions.
+ *
+ * ABS Data API: https://www.abs.gov.au/about/data-services/application-programming-interfaces-apis/data-api-user-guide
+ *
+ * GSP, debt and productivity are annual/budget figures and are updated by
+ * hand (see the review issue opened by the workflow).
  */
 
 import fs from 'fs';
@@ -14,214 +17,141 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DATA_FILE = path.join(__dirname, '../src/data/key_metrics.json');
+const ABS_API_BASE = 'https://data.api.abs.gov.au/rest/data';
 
-// State codes mapping (ABS uses these in SDMX series)
-const STATE_CODES = {
-  '1': 'NSW',
-  '2': 'VIC', 
-  '3': 'QLD',
-  '4': 'SA',
-  '5': 'WA',
-  '6': 'TAS',
-  '7': 'NT',
-  '8': 'ACT',
-  '0': 'AUS'
-};
+// ABS region codes → ASEPS ids. CPI uses capital cities (1–8) and 50 for
+// the weighted average of eight capitals (national).
+const LF_REGIONS = { '1': 'NSW', '2': 'VIC', '3': 'QLD', '4': 'SA', '5': 'WA', '6': 'TAS', '7': 'NT', '8': 'ACT', AUS: 'AUS' };
+const CPI_REGIONS = { '1': 'NSW', '2': 'VIC', '3': 'QLD', '4': 'SA', '5': 'WA', '6': 'TAS', '7': 'NT', '8': 'ACT', '50': 'AUS' };
 
-// ABS SDMX API endpoints (free, no authentication required)
-const ABS_API_BASE = 'https://api.data.abs.gov.au/data';
+const startYear = new Date().getUTCFullYear() - 1;
 
-const ENDPOINTS = {
-  // ABS 5220.0 - State Accounts (GSP chain volume measures)
-  gsp: `${ABS_API_BASE}/ABS,GSP,1.0.0/1..Q?startPeriod=2022&detail=dataonly&format=jsondata`,
-  
-  // ABS 6202.0 - Labour Force (unemployment by state)
-  unemployment: `${ABS_API_BASE}/ABS,LF,1.0.0/M2.1..15.Q?startPeriod=2024&detail=dataonly&format=jsondata`,
-  
-  // ABS 6401.0 - CPI (by capital city)
-  cpi: `${ABS_API_BASE}/ABS,CPI,1.0.0/1..Q?startPeriod=2024&detail=dataonly&format=jsondata`,
-  
-  // ABS 5512.0 - Government Finance Statistics (debt)
-  gfs: `${ABS_API_BASE}/ABS,GFS,1.0.0/A..Q?startPeriod=2023&detail=dataonly&format=jsondata`
-};
+const SOURCES = [
+  {
+    field: 'unemployment_rate_pct',
+    label: 'ABS 6202.0 Labour Force — unemployment rate, persons 15+, seasonally adjusted',
+    // MEASURE.SEX.AGE.TSEST.REGION.FREQ — M13 unemployment rate, 3 persons, 1599 15+, 20 seasonally adjusted
+    url: `${ABS_API_BASE}/LF/M13.3.1599.20.${Object.keys(LF_REGIONS).join('+')}.M?startPeriod=${startYear}-01`,
+    regions: LF_REGIONS,
+    range: [0, 20],
+  },
+  {
+    field: 'cpi_inflation_pct',
+    label: 'ABS 6401.0 CPI — all groups, % change from corresponding quarter of previous year',
+    // MEASURE.INDEX.TSEST.REGION.FREQ — 3 annual % change, 10001 all groups CPI, 10 original
+    url: `${ABS_API_BASE}/CPI/3.10001.10.${Object.keys(CPI_REGIONS).join('+')}.Q?startPeriod=${startYear}-Q1`,
+    regions: CPI_REGIONS,
+    range: [-5, 20],
+  },
+];
 
 async function fetchJSON(url) {
   const response = await fetch(url, {
     headers: {
-      'Accept': 'application/json',
-      'User-Agent': 'ASEPS-DataFetcher/1.0 (https://github.com/aseps-au/aseps; Educational research tool)'
-    }
+      Accept: 'application/vnd.sdmx.data+json',
+      'User-Agent': 'ASEPS-DataFetcher/2.0 (educational research tool)',
+    },
   });
-  
   if (!response.ok) {
     throw new Error(`ABS API error: ${response.status} ${response.statusText} for ${url}`);
   }
-  
   return response.json();
 }
 
-function extractLatestValue(seriesData) {
-  const obs = seriesData.observations || {};
-  const periods = Object.keys(obs).map(Number).sort((a, b) => b - a);
-  if (periods.length === 0) return null;
-  return obs[periods[0]][0]; // First value is the observation value
+/**
+ * Parse an SDMX-JSON response into { regionCode: { value, period } } using the
+ * dimension metadata in the response rather than assuming key positions.
+ */
+export function latestByRegion(json) {
+  const root = json.data ?? json;
+  const structure = root.structure ?? root.structures?.[0];
+  const seriesDims = structure?.dimensions?.series ?? [];
+  const timeValues = structure?.dimensions?.observation?.[0]?.values ?? [];
+  const regionPos = seriesDims.findIndex(d => d.id === 'REGION');
+  if (regionPos < 0) throw new Error('REGION dimension not found in ABS response');
+
+  const out = {};
+  for (const [key, s] of Object.entries(root.dataSets?.[0]?.series ?? {})) {
+    const regionIdx = Number(key.split(':')[regionPos]);
+    const region = seriesDims[regionPos].values[regionIdx]?.id;
+    const obs = Object.entries(s.observations ?? {})
+      .filter(([, v]) => v?.[0] !== null && v?.[0] !== undefined)
+      .map(([i, v]) => ({ period: timeValues[Number(i)]?.id, value: Number(v[0]) }))
+      .filter(o => o.period && Number.isFinite(o.value))
+      .sort((a, b) => a.period.localeCompare(b.period));
+    if (region && obs.length) out[region] = obs[obs.length - 1];
+  }
+  return out;
 }
 
-async function fetchGSPData() {
-  console.log('Fetching GSP data from ABS 5220.0...');
+async function fetchSource(src) {
+  console.log(`Fetching ${src.label}...`);
   try {
-    const data = await fetchJSON(ENDPOINTS.gsp);
-    const series = data.data?.dataSets?.[0]?.series || {};
-    
+    const parsed = latestByRegion(await fetchJSON(src.url));
     const results = {};
-    for (const [key, value] of Object.entries(series)) {
-      // Key format: stateCode:measureCode:...
-      const parts = key.split(':');
-      const stateCode = parts[0];
-      const stateId = STATE_CODES[stateCode];
-      
-      if (stateId) {
-        const latestValue = extractLatestValue(value);
-        if (latestValue !== null) {
-          results[stateId] = results[stateId] || {};
-          results[stateId].gsp_growth_pct = Math.round(latestValue * 10) / 10;
-        }
+    for (const [code, { value, period }] of Object.entries(parsed)) {
+      const id = src.regions[code];
+      if (!id) continue;
+      if (value < src.range[0] || value > src.range[1]) {
+        console.warn(`  ⚠ ${id}.${src.field}=${value} outside plausible range — skipped`);
+        continue;
       }
+      results[id] = { value: Math.round(value * 10) / 10, period };
     }
-    
-    console.log(`✓ GSP data fetched for ${Object.keys(results).length} states`);
+    console.log(`✓ ${src.field}: ${Object.keys(results).length} regions`);
     return results;
   } catch (err) {
-    console.error(`⚠ GSP fetch failed: ${err.message}. Using existing data.`);
-    return null;
+    console.error(`⚠ ${src.field} fetch failed: ${err.message}. Keeping existing data.`);
+    return {};
   }
 }
 
-async function fetchUnemploymentData() {
-  console.log('Fetching unemployment data from ABS 6202.0...');
-  try {
-    const data = await fetchJSON(ENDPOINTS.unemployment);
-    const series = data.data?.dataSets?.[0]?.series || {};
-    
-    const results = {};
-    for (const [key, value] of Object.entries(series)) {
-      const parts = key.split(':');
-      const stateCode = parts[2];
-      const stateId = STATE_CODES[stateCode];
-      
-      if (stateId) {
-        const latestValue = extractLatestValue(value);
-        if (latestValue !== null) {
-          results[stateId] = results[stateId] || {};
-          results[stateId].unemployment_rate_pct = Math.round(latestValue * 10) / 10;
-        }
-      }
-    }
-    
-    console.log(`✓ Unemployment data fetched for ${Object.keys(results).length} states`);
-    return results;
-  } catch (err) {
-    console.error(`⚠ Unemployment fetch failed: ${err.message}. Using existing data.`);
-    return null;
-  }
-}
-
-async function fetchCPIData() {
-  console.log('Fetching CPI data from ABS 6401.0...');
-  try {
-    const data = await fetchJSON(ENDPOINTS.cpi);
-    const series = data.data?.dataSets?.[0]?.series || {};
-    
-    const results = {};
-    // CPI is by capital city, not state — map cities to states
-    const CITY_TO_STATE = {
-      '1': 'NSW', '2': 'VIC', '3': 'QLD', '4': 'SA', 
-      '5': 'WA', '6': 'TAS', '7': 'NT', '8': 'ACT'
-    };
-    
-    for (const [key, value] of Object.entries(series)) {
-      const parts = key.split(':');
-      const cityCode = parts[1];
-      const stateId = CITY_TO_STATE[cityCode];
-      
-      if (stateId) {
-        const latestValue = extractLatestValue(value);
-        if (latestValue !== null) {
-          results[stateId] = results[stateId] || {};
-          results[stateId].cpi_inflation_pct = Math.round(latestValue * 10) / 10;
-        }
-      }
-    }
-    
-    console.log(`✓ CPI data fetched for ${Object.keys(results).length} states`);
-    return results;
-  } catch (err) {
-    console.error(`⚠ CPI fetch failed: ${err.message}. Using existing data.`);
-    return null;
-  }
+function quarterLabel(d = new Date()) {
+  return `${d.getUTCFullYear()}-Q${Math.floor(d.getUTCMonth() / 3) + 1}`;
 }
 
 async function main() {
   console.log('\n🇦🇺 ASEPS ABS Data Fetcher');
   console.log('================================');
   console.log(`Started: ${new Date().toISOString()}`);
-  
-  // Load existing data as fallback
-  const existingData = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  
-  // Fetch all data sources
-  const [gspData, unemploymentData, cpiData] = await Promise.all([
-    fetchGSPData(),
-    fetchUnemploymentData(),
-    fetchCPIData()
-  ]);
-  
-  // Merge fetched data into existing structure
+
+  const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  const fetched = await Promise.all(SOURCES.map(fetchSource));
+
   let updatedCount = 0;
-  
-  const mergeIntoState = (stateData, newData, stateId) => {
-    if (!newData || !newData[stateId]) return stateData;
-    
-    for (const [key, value] of Object.entries(newData[stateId])) {
-      if (stateData[key] !== value) {
-        console.log(`  ${stateId}.${key}: ${stateData[key]} → ${value}`);
-        stateData[key] = value;
+  const periods = { ...(data._meta.auto_reference_periods ?? {}) };
+
+  SOURCES.forEach((src, i) => {
+    for (const [id, { value, period }] of Object.entries(fetched[i])) {
+      const target = id === 'AUS' ? data.national : data.states[id];
+      if (!target) continue;
+      if (target[src.field] !== value) {
+        console.log(`  ${id}.${src.field}: ${target[src.field]} → ${value} (${period})`);
+        target[src.field] = value;
         updatedCount++;
       }
+      periods[src.field] = period;
     }
-    return stateData;
-  };
-  
-  // Update national data
-  if (gspData?.AUS) {
-    existingData.national = mergeIntoState(existingData.national, gspData, 'AUS');
-  }
-  
-  // Update all states
-  for (const [stateId, stateData] of Object.entries(existingData.states)) {
-    existingData.states[stateId] = mergeIntoState(stateData, gspData, stateId);
-    existingData.states[stateId] = mergeIntoState(existingData.states[stateId], unemploymentData, stateId);
-    existingData.states[stateId] = mergeIntoState(existingData.states[stateId], cpiData, stateId);
-  }
-  
-  // Update metadata
-  existingData._meta.generated = new Date().toISOString().split('T')[0].substring(0, 7).replace('-', '-Q');
-  existingData._meta.last_auto_update = new Date().toISOString();
-  existingData._meta.next_auto_update = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
-    .toISOString().split('T')[0];
-  
-  // Write updated data
-  fs.writeFileSync(DATA_FILE, JSON.stringify(existingData, null, 2));
-  
-  console.log(`\n✅ Complete: ${updatedCount} metrics updated`);
-  console.log(`📁 Written to: ${DATA_FILE}`);
-  
+  });
+
   if (updatedCount === 0) {
-    console.log('ℹ No changes detected — data appears current');
+    console.log('\nℹ No value changes — key_metrics.json left untouched');
+    return;
   }
+
+  const now = new Date();
+  data._meta.generated = quarterLabel(now);
+  data._meta.last_auto_update = now.toISOString();
+  data._meta.next_auto_update = new Date(now.getTime() + 92 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  data._meta.auto_reference_periods = periods;
+
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2) + '\n');
+  console.log(`\n✅ Complete: ${updatedCount} metrics updated → ${DATA_FILE}`);
 }
 
-main().catch(err => {
-  console.error('\n❌ Fatal error:', err);
-  process.exit(1);
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch(err => {
+    console.error('\n❌ Fatal error:', err);
+    process.exit(1);
+  });
+}

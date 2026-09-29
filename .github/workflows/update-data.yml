@@ -15,12 +15,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
@@ -52,15 +52,15 @@ jobs:
           git commit -m "auto: ABS data refresh $(date +%Y-%m-%d)
 
           - Updated key economic metrics from ABS SDMX API
-          - Sources: ABS 5220.0, 6202.0, 6401.0
-          - Reference period: Latest available quarter
+          - Sources: ABS 6202.0 Labour Force, ABS 6401.0 CPI
+          - Reference periods: see _meta.auto_reference_periods
           
           [automated]"
           git push
 
       - name: Create manual review issue
         if: steps.diff.outputs.changed == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const today = new Date().toISOString().split('T')[0];
@@ -73,7 +73,7 @@ jobs:
               The automated ABS data fetch has completed for **${today}**.
               
               ### What was updated automatically:
-              - \`src/data/key_metrics.json\` — All state GSP, unemployment, CPI, debt metrics
+              - \`src/data/key_metrics.json\` — State unemployment rate and annual CPI inflation
               
               ### What requires manual review:
               - [ ] \`src/data/deep_pathways.json\` — Check if new issues have emerged / pathways need updating
